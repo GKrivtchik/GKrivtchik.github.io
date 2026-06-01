@@ -1,0 +1,32 @@
+---
+title: "Guillaume Krivtchik"
+listing:
+  contents: posts/*/index.qmd
+  sort: "date desc"
+  type: default
+  max-items: 3
+  fields: [title, categories, date]
+  categories: true
+  feed: true
+page-layout: article
+title-block-style: none
+---
+
+::: {.home-intro}
+# Guillaume Krivtchik
+
+I build tools for analysis and decision-making.
+
+Current: energy systems modelling engineer @ [OECD - Nuclear Energy Agency](https://www.oecd-nea.org/)
+
+Prev: modelling engineer @ Terra Praxis, research engineer @ CEA
+
+[LinkedIn](https://www.linkedin.com/in/guillaume-krivtchik-29b96693/)
+:::
+
+## Projects
+
+- [Nosy.jl](https://github.com/oecd-nea/Nosy.jl): composable, component-based energy system modeling and optimization toolkit
+- [NuclearFuelScenario.jl](https://github.com/GKrivtchik/NuclearFuelScenario.jl): small and fast nuclear fuel model for supply chain analysis
+
+## Blog

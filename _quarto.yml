@@ -1,0 +1,35 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "Energy modelling blog"
+  site-url: "https://gkrivtchik.com"
+  description: "A personal website and blog about energy systems modelling"
+  search: false
+  navbar:
+    title: false
+    left:
+      - text: home
+        href: index.qmd
+      - text: blog
+        href: posts/index.qmd
+      - text: github
+        href: https://github.com/GKrivtchik
+  page-footer:
+    left: "Guillaume Krivtchik"
+    right:
+      - text: rss
+        href: posts/index.xml
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: false
+    code-copy: true
+    anchor-sections: true
+    smooth-scroll: true
+
+execute:
+  freeze: auto

@@ -1,0 +1,66 @@
+---
+title: "Simplifying a unit commitment problem with masks and state propagation"
+description: "This post shows how masking startup/shutdown decisions plus state propagation can reduce a yearly unit commitment formulation from 26280 variables to 203 in a simplified nuclear refuelling example."
+date: 2026-06-01
+categories: [MILP, unit commitment, energy systems]
+---
+
+Unit commitment (UC) is a useful tool to model the behavior of almost any unit with states, in particular on and off. It is conceptually very simple:
+the state of a unit at time $t$ (in particular: on or off) depends on its previous state, and on whether it was turned on or turned off at the previous stage (time index may vary based on formalism):
+
+$$
+state_t = state_{t-1} + startup_{t-1} - shutdown_{t-1}
+$$
+
+And then, based on the state, you can derive the output or any operation that the unit is allowed to perform.
+
+In addition to its conceptual simplicity, what is also great about it is that it is very modular at its core, and many small bits can be added based on what you need to model:
+
+- Clustered unit commitment (CUC) models a fleet of units, using numbers instead of booleans.
+- Variable flow can be added, for instance when the unit has a minimum output level (e.g. minimum power is 20% of nominal power).
+- Startup and shutdown procedures can be added, by adding flows at $t+\Delta t$ that are proportional to $startup_{t}$ and  $shutdown_{t}$.
+- Startup cost or flows can be added, again proportional to $t+\Delta t$.
+- You can model other states than on and off, e.g. by replacing $shutdown$ with a vector of different ways to $shutdown$ with $\sum ways\_to\_shutdown_t = shutdown_t$.
+- Minimum uptime and downtime can be enforced by constraining, at each timestep $t$, the switches that occurred during the preceding duration $L$:
+$\sum_{\tau \in [t-L,\,t)} shutdown_\tau \le N - state_t + startup_t$ with $N$ as the number of units in the fleet and $L = min downtime + shutdown\_duration + startup\_duration$ (the formula is an approximation, the actual expression is a little too cumbersome to be presented here).
+
+Unfortunately, UC also tends to make the optimization process significantly more difficult for the solver. 
+
+First, it adds many variables: at least 3 per timestep as you need to express the state and the state switches, that is 26280 variables if you assume one year of 8760 hours. Some of the unit commitment flavors add many constraints to your problem (in particular lengthy minimum uptime/downtime in my experience). Also, it is common to model multiple technologies using the UC formalism in the same problem. And finally, when you use unit commitment, you're generally doing it because you need some degree of accuracy, which correlates it with using integer constraints.
+
+However, there are ways to simplify the problem. 
+
+Let's take the example of modelling a nuclear plant. The example I'm taking is simplified to focus on the relevant points, but I will still emphasize some strong hypotheses:
+
+- No ramping for load following (not all operators perform load following with nuclear, although it's technically feasible on various plant types).
+- No short-duration shutdown for load-following purposes.
+- Minimum downtime is 30 days (720 hours) for refuelling. We assume that the operator can schedule refuelling optimally during the year.
+- Most large PWR reactors have to refuel every 1.5 years, that we interpret as "the sum of refuelling shutdowns over the year must be greater than or equal to 2/3 of the number of units"
+
+One of the methods I recently implemented in the energy systems modelling toolkit [Nosy](https://github.com/oecd-nea/Nosy.jl) is to reduce the number of timesteps at which you declare UC variables or enforce UC constraints.
+It consists in applying masks to the startup and shutdown variable vectors so that we only allow starting or shutting down at specific timesteps. For instance: instead of allowing your plants 
+to shut down for refuelling at any hour, they only are allowed to do so once a week e.g. the first hour of every week.
+
+Why are you allowed to use masks? There are multiple answers, depending on the problem but also on the results.
+Maybe it makes no sense for the operator to optimize the refuelling schedule on a sub-weekly basis: once teams and materials are ready, delaying the operations seems economically detrimental.
+Maybe because analysis of the results shows that the solution you obtain is reasonably close to not using masks, which constitutes an a posteriori justification of your hypothesis.
+Maybe you don't need a perfect solution, and you will use masks as a tool to make an in-house heuristic to get an acceptable solution quick enough.
+One last reason is that maybe this is not your "reference" run, just an intermediate step that you are using to warm-start your non-simplified problem. A low-cost high-quality initialization gives you a head start for your non-simplified reference run. 
+Still, using masks shrinks the feasible region: you need to make sure you have a valid reason for using it.
+
+
+Let's assume that we make a shutdown mask vector $sdm$, length 8760 hours, so that $sdm_h = true$ for any $h$ multiple of 24*7 (shifted by one hour, so that $sdm_1$ is true, which will simplify our reasoning later), false otherwise. We only create shutdown variables when $sdm_h$ is true, meaning that we create 53 shutdown variables (h in {1, 169, ..., 8737}) instead of 8760.
+
+For the startup, it is slightly more complex. We assumed that the minimum downtime was 30*24=720 hours. We have to make sure that we can allow the reactors to start exactly 720 hours after shutdown. That gives a 720-hour shift of $sdm$. We can also give some more freedom e.g. add mid-week startup slots, but not in this simple case. All in all, we now have 48 startup variables (h in {721, 889, ..., 8617}).
+
+So we've managed to reduce the number of variables for unit commitment from 26280 difficult and generally integer variables to 8861 (8760 for state + 53 for shutdown + 48 for startup), which is already a substantial reduction. However, we still have to apply the most interesting part of the mask simplification: the state propagation. 
+
+Let's assume that we don't even know the number of units, because that could also be a variable. At the first hour, the state is variable $state_1$. We've made above the hypothesis that reactors are allowed to shut down at the first hour. Because of the equality $state_t = state_{t-1} + startup_{t-1} - shutdown_{t-1}$, we don't know the state at hour 2 before solving the problem, so let's use variable $state_2$ to represent it. Now, the reactors aren't allowed to start up or shut down at hour 2, because of the masks. This tells us that by definition, $state_3$ is equal to $state_2$. Instead of a variable + constraint duo, we can just express this by referencing $state_3$ as $state_2$, and never introduce a $state_3$ variable. Same thing for $state_4$ and so on, until you meet a timestep where reactors are either allowed to start up or shut down. If you assume that time is linear and not circular, that gives 102 different states (one plus as many as startup and shutdown variables, as they never switch at the same time), and the rest are simply propagated. 
+
+All in all, we're now down to 203 variables (53+48+102) instead of 26280. We've also avoided many constraints. In particular, the extremely long expressions usually generated by the minimum downtime constraint have been substantially simplified, because many of the duplicate state switches have now transformed into just a coefficient before a small number of switches.
+
+The implementation of the masks in Nosy is [here](https://github.com/oecd-nea/Nosy.jl/blob/main/src/system/components/behaviors/regular/archetypes/commitment/fleet.jl).
+
+When not to use this? There are many situations where you will need more granularity, so this method must always be used with reasonable impact assessment. The weekly mask is a particularly aggressive presolving tactic, which works well for demonstration purposes but may be ill-suited for your everyday problem. You can tune this method to adapt it to the shape of your problem and make it less blind and extreme. For instance, your business knowledge may give you a good idea of when it's interesting to start up or shut down units - maybe you've inferred this from a preliminary LP solve, maybe you've read it in the price time series, or maybe you have another idea of when it's possible or impossible to simplify the behavior of your unit. 
+
+Using masks and state propagation generally is one of the first steps I make when I need to make a difficult unit-commitment problem more tractable. Depending on your problem, it can make the problem significantly easier. However, it is not a free approximation, and will likely require efforts in both business logic and validation.
