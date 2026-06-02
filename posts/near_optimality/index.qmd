@@ -1,0 +1,54 @@
+---
+title: "Optimization and near-optimality"
+description: "Optimization finds a minimum, but near-optimality helps reveal strategic choice."
+date: 2026-06-02
+categories: [energy systems, optimization]
+---
+
+Much of engineering revolves around optimization. Start with a system, an object, a plan, and make it better - less expensive, more capable, more robust etc.
+
+For most of my career, I've had to optimize. I've changed domains (energy systems, nuclear materials management, supply chain) and method (LP/MILP, multiobjective, metaheuristics with surrogate modelling) multiple times, but optimization has stayed a constant.
+
+
+Some disciplines are even seemingly shaped by optimization. For instance, energy systems economics revolves around optimization - in general cost optimization. Capacity expansion analysis studies how to deploy and use capacity so as to reach the least-cost strategy. 
+
+Optimization is conceptually simple: you're looking for the minimum of a function. In general, one looks for a combination of parameters that will lead to minimizing a function. But sometimes, one mistakenly interprets that as looking for "the best" combination of parameters. 
+
+Mathematically, this is a mistake because optimization does not generally guarantee a unique argmin unless the problem has specific uniqueness properties. There is no guarantee that you have one "best" minimizer - you may have infinitely many. If you look at the function $f(x,y) = |x-y|$, you will immediately notice that all tuples $(x,x)$ will minimize the function. 
+
+This is an important point from a practical perspective too. Depending on the method you use, you may only obtain one result, that is an arbitrary minimizer, $(x,y)$ in our example – for instance (3,3). What the method said is that (3,3) minimizes the function. What one would incorrectly infer is that (3,3) is "the" (implicitly unique or significant) optimal tuple. 
+
+Some optimization methods tackle this point in particular. For instance, lexicographic optimization lets you define a ranked set of objectives $(f_1, f_2, ..., f_n)$, and minimizes $f_1$, then minimizes $f_2$ among the minimizers of $f_1$ and so on. This method conceptually solves the problem of mathematically equivalent solutions - even though in practice making this claim is actually difficult, as you would need a full objective hierarchy to discriminate solution. In addition, to my knowledge, these methods generally don't provide the full set of solutions at each step. 
+
+But stopping here would have us miss the more important point, which originates from the fact that systems modelling is full of bias and uncertainty. If you have two tuples of solutions to a problem, and one barely has an infinitesimally lower objective value than the other, should you legitimately exclude the worse solution?
+
+There are many cases where your system has near-optimal solutions, with parameters quite different from the optimal solution. Depending on how you define near-optimality, a near-optimal solution is just as desirable as an optimal one. The existence of this near-optimal space is fundamental, because it characterizes choice: instead of just a tuple of optimal parameters, you may choose among a range of tuples.
+
+Near-optimality is relative to your problem. Maybe you accept that 1% variation is good enough. Maybe the uncertainty of your input data is such that 2% variation on your objective value is well below the possible impact of uncertainty. Maybe you actively decide to trade some optimality for choice and flexibility.
+
+In any case, the near-optimal set, with relative tolerance $\epsilon$, is a valuable piece of information (for a strictly positive minimization objective):
+
+$$
+S_\epsilon = \{z \in X : f(z) \le (1+\epsilon) f_{\min}\}
+$$
+
+A quick algorithm I generally try when studying a system is to scan the range of the near-optimal set, one meaningful variable at a time. Let's assume I'm interested in optimizing a function $f(x,y)$, but I also want to know if I have some leeway when choosing $y$, or if my system is quickly deoptimized when $y$ changes from its optimal solution value. First, I evaluate $\min f(x,y)$ and obtain $f_{\min}$. Then, I allow a tolerance $\epsilon$, and run the following optimizations:
+
+$$
+\begin{aligned}
+\min \quad & y \\
+\text{subject to} \quad & (x,y) \in X \\
+& f(x,y) \leq (1+\epsilon) f_{\min}
+\end{aligned}
+$$
+
+and the same thing for max $y$. Interestingly, this snippet is actually quite close to what lexicographic algorithms actually do under the hood, but with a different philosophy. 
+
+In my experience, this is enlightening when applied to capacity expansion problems. When you solve your problem, you obtain what is commonly referred to as the "optimal" capacity – actually a minimizer capacity. But because of uncertainty and modelling assumptions, costs with one percent difference are indistinguishable to me. For example, overnight costs tend to be both impactful parameters and highly uncertain ones. So after I optimize the cost, I generally ask next "what is the range of technology x so that cost is near-optimal". What I've seen is that if your system is behaving smoothly, with progressively more expensive flexibility resources (in particular: if you're modelling a well-interconnected network), and technologies with different advantages (e.g. baseload for one, lower LCOE for the other), then the range of near-optimal capacity for a competitive technology can be wide. 
+
+Recently, I had to evaluate least-cost capacity mixes at country scale, through a capacity expansion study of multiple scenarios. I applied this technique to check the range of the near-cost-optimal deployment of two technologies (nuclear and onshore wind for that case). Then, I fixed the capacity of one technology at sampled values within its near-optimal range, and re-optimized the system. This gave me the matching capacity of the other technology. It turns out that there was a substantially wider range of near-optimal solutions than expected. What was also quite interesting is that the system's behavior would shift from net exporter to net importer while shifting from one technology to the other - which also showed that both being an importer or an exporter could be cost-optimal strategies, which leaves room for choice. 
+
+The concept of "choice" matters here. This type of choice is not about applying a subjective personal preference. It is the way one can factor in additional information not present in the modelling effort. For instance, for strategic reasons, the country would prefer being an exporter than an importer. Or they have uncertainty regarding future energy consumption by industry, and are looking for a mix compatible with a rapidly rising demand. They can also make a no-regrets decision to invest now up to the lower bound for that technology's capacity in the near-optimal set, and decide whether to invest more or not later. 
+
+
+All in all, the point is that optimization is often too small an object to support real-world decisions. In systems with uncertainty, modelling assumptions, and strategic constraints outside the objective function, the near-optimal set is often where the useful information lives. Optimization tells you the minimum value of your function and gives you one minimizer, but near-optimality tells you what choices remain.
