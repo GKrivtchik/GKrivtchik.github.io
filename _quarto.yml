@@ -16,6 +16,8 @@ website:
         href: posts/index.qmd
       - text: github
         href: https://github.com/GKrivtchik
+      - text: linkedin
+        href: https://www.linkedin.com/in/guillaume-krivtchik-29b96693/
   page-footer:
     left: "Guillaume Krivtchik"
     right:
