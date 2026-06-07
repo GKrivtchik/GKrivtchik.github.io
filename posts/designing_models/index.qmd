@@ -1,0 +1,87 @@
+---
+title: "Architecting components in energy system models"
+description: "A lesson learned from building energy systems models and then having to use them."
+date: 2026-06-07
+categories: [energy systems, architecture, Julia]
+---
+
+I've always worked in small teams. The direct consequence is that I've generally occupied multiple team functions at the same time, in particular model builder and model user.
+
+A few years back, at the OECD Nuclear Energy Agency, I built [POSY](https://git.oecd-nea.org/posy/posy)[^1], a capacity expansion and dispatch energy systems model written in Julia. My most serious programming project before that was a discrete event simulation written in Java. However, as I was new to linear programming models, I was advised by colleagues at another institution to take a look at the programming language Julia, in particular because of its very strong operations research framework [JuMP](https://jump.dev/). In fact, two of our closest partners at the time were using Julia.
+
+[^1]: Soon to be replaced by [Nosy](https://github.com/oecd-nea/Nosy.jl) (open-source) + POSY2 (to be published).
+
+I was initially confused by Julia's deliberate avoidance of class-style inheritance: abstract types cannot hold fields, concrete types cannot be subtyped, and much of what inheritance would usually do is handled through multiple dispatch[^2]. I found an alternative to inheritance with traits[^3], even though their implementation felt slightly awkward to me.
+
+
+[^2]: Multiple dispatch is actually an amazing concept, and super practical for writing composable code.
+
+[^3]: Traits are not native in Julia, I would qualify them as Julia-adjacent.
+
+
+Anyway, driven by my previous experiences, I started building POSY using a top-down approach. My target was to build a system where components interact, so I implemented each component type. I found some general patterns that helped me organize the components into families that component types would implement. 
+For instance, the "storage" family would be used for both battery storage and large hydro reservoirs with natural intake. The "dispatchable" family would work for non-level-based plants whose output is an optimization variable, e.g. nuclear plants and gas plants.
+
+At the beginning, that worked very well. I could rapidly prototype the first components and make them interact together in simple least-cost optimizations. So I decided to keep the model, improving it little by little when I needed a new component or a new constraint. 
+
+
+Unfortunately, I happened to need many more components, and I patched the oddities onto the edifice. Every family accumulated optional features until it stopped meaning one thing.
+For instance, the "storage" abstract type was initially designed for batteries, but soon enough I had to model large hydro reservoirs, so I added fields describing natural intake in addition to charging variables. Another example is that unit commitment became part of every dispatchable plant, but was quite often unused for tractability reasons.
+Some types became severely bloated, a substantial amount of the code was duplicated, and the model became difficult to maintain and expand without breaking things. My architecture was inadequate. In the end, the model did the job, the project was successful, but I was relieved that POSY would not have to grow any bigger.
+
+
+Retrospectively, I believe that my mental model was suboptimal because it was overfitting my previous projects: the objects my models had to manipulate generally were more similar. I was used to dealing with complexity in algorithms, not heterogeneity of objects. Also, for some reason, "composition over inheritance" had never really clicked with me at that time. 
+
+A few years later, I needed to work again on a similar problem, except even more heterogeneous. In particular, the system I studied with POSY contained a single node (a single electricity market bidding zone, surrounded by neighbours modelled as interconnector capacity and price time series). This time, the system contained 4 nodes with capacity expansion, plus 10-15 other power nodes without capacity expansion, and just as many hydrogen nodes. After estimating the volume of work it would take to adapt POSY to this new problem, I made the decision to implement a different model. The new model would bear the same equations, but would have to be more flexible, more extendable. 
+
+Having worked for a few years with Julia, I decided to write the new model in a Julian way, by being composition-heavy. This time, I designed the model bottom-up: I wanted to isolate every little piece of business logic, and allow these pieces to interact at a small scale. This led me to design a new grammar for modelling components in energy systems (or any component-based commodity-flow graph, actually). The vocabulary of this grammar is: [`model archetype`](https://oecd-nea.github.io/Nosy.jl/dev/concepts/building-snapshot/#Model-Archetype), [`joint flow`](https://oecd-nea.github.io/Nosy.jl/dev/concepts/building-snapshot/#Joint-Flows), [`behavior`](https://oecd-nea.github.io/Nosy.jl/dev/concepts/building-snapshot/#Behaviors), and [`component`](https://oecd-nea.github.io/Nosy.jl/dev/concepts/building-snapshot/#Components).
+
+Model archetypes are a small family of simple models, each having only one function. They create the "core" variables. For instance: dispatchable source (one output flow that is a series of independent variables), profile source (one output flow is one variable multiplied by a time series), basic storage (one input flow, one output flow, one level, all are a series of independent variables), basic converter (convert an input flow into an output flow), etc. There are about ten model archetypes so far, and I have not felt the need to add more after multiple full-scale studies with the model. What's important is that they don't do anything complex: they just do one thing. They don't have intrinsic capacity, cost, unit commitment, or any non-trivial feature.
+
+Joint flows constitute the second element of components. Joint flows are additional flows that can be:
+
+- Linked to other component flows via functions, such as CO2 emissions by a gas plant proportional to the energy output;
+- Partly linked to other component flows, such as heat production by a CHP plant, that may be linked or not to the power output, depending on type;
+- Independent from other component flows, such as constant consumption of electricity by a system, independently of its use.
+
+Joint flows are useful because they make it easy to extend the interaction of a model. Their existence is one of the reasons why it was possible to keep the set of model archetypes small.
+
+
+Model archetypes and their joint flows are complemented by behaviors. Behaviors are a family of mostly orthogonal features, which refine how the model operates. They do not add flows, but they may add constraints, auxiliary variables, etc. They will generally constrain how the flows behave. For instance, the "capacity" behaviors add a notion of capacity (fixed capacity generally bounds the flow, variable capacity ties it to a variable, etc.). [`UnitCommitment`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.UnitCommitment) is another example of behavior; it exists to constrain one of the flows of a model to obey the unit commitment rules (state, startup and shutdown, min downtime and uptime etc.). Another family of behaviors is costs, which add different types of cost to a model (fixed cost relative to capacity, variable cost relative to flows).
+
+So, to summarize, a component is made of the three following items:
+
+- Exactly one model archetype, which accomplishes a basic, essential, minimal function.
+- As many joint flows as necessary, which add more input or output flows to the component.
+- As many behaviors as necessary, which refine how the component works.
+
+As an example, one can define a gas plant fleet the following way, for a capacity expansion and dispatch study in a CO2-limited setting:
+
+- [`DispatchableSource`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.DispatchableSource) model archetype, generating the variables for variable output power.
+- [`LinkedJointFlow`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.LinkedJointFlow) generating a CO2 joint flow, proportional to the power output.
+- [`VariableCapacity`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.VariableCapacity) behavior, which defines that the capacity of the gas plant can be optimized within boundaries.
+- If one needs accurate flexibility analysis, [`UnitCommitment`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.UnitCommitment) behavior will give state as well as startup / shutdown durations to the plant; and [`Ramping`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.Ramping) (up and down) will constrain the ramping of the free output flow.
+- Multiple [`FixedCost`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.FixedCost) behaviors: an annualized investment cost, an annualized decommissioning cost, and a fixed O&M cost proportional to the capacity.
+- Multiple [`VariableCost`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.VariableCost) behaviors: a variable O&M cost proportional to the output flow, a fuel cost proportional to the output flow, and one targeting the CO2 flow to represent the impact of CO2 price.
+- Optionally [`ReserveUp`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.ReserveUp) and [`ReserveDown`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.ReserveDown) to model contribution of the fleet to operational reserves.
+
+This grammar is very helpful because it provides a very high level of freedom in defining components, and does so in a very contained way. Choosing composition over inheritance allowed this parsimonious approach: the component owns just as many refinements as necessary. 
+
+All is not perfectly simple though. 
+In addition to interacting with flows, behaviors may also interact with other behaviors. 
+This is not without challenges, because adding one behavior requires assessing the interaction with all existing behaviors.
+
+A simple example of behaviors interacting is that capacity-related costs (e.g. overnight cost) will look for a capacity behavior matching the requirements of the cost behavior. If there is none, the behavior cannot be applied and throws an error. 
+
+A more complex example is how [`Ramping`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.Ramping) behavior equations depend on whether the target component bears a [`UnitCommitment`](https://oecd-nea.github.io/Nosy.jl/dev/api/#Nosy.UnitCommitment) behavior connected to the ramping target flow. If not, ramping is applied to the flow directly. But if it does, ramping must be applied to the free-flow of the unit commitment, not the flow itself. 
+
+The implementation of these interactions is based on precedence rules. The instantiation of behaviors to a component follows a pre-established order that guarantees that any behavior possibly influencing another behavior is instantiated before the behavior that is influenced.
+
+So far all the behaviors required for modelling power systems or industrial systems with usual requirements have been implemented and the interactions seem clean: no production bugs related to behavior handling have happened in a long time. 
+
+I think that the current scope of model archetype, joint flows and behaviors works well for Nosy. 
+One question remaining, at least conceptually, is how far that concept of separation could have been pushed. In particular, I think that model archetypes now have the least clearly defined scope. I mentioned that a model archetype is something simple with exactly one essential function. 
+It is likely that the current model still is a suboptimal level of abstraction: perhaps it could have been something less "physical", and more mathematical, such as a set of variables, e.g. "vector of independent variables", or "one variable multiplied with a numeric vector", that one would then connect to an empty box either as an input or an output. And some features currently implemented as model archetypes, e.g. "having a level" (for storage), could be shifted to behaviors. In the future I might experiment with that thought, even though the current API of Nosy has the advantage of being relatively intuitive to modelers.
+
+
+NB: for the sake of simplicity, I deliberately omitted the concept of [`port`](https://oecd-nea.github.io/Nosy.jl/dev/concepts/building-snapshot/#Ports) from the description of components. Ports are the way flows are emitted or targeted. For more information, please refer to [Nosy's documentation](https://oecd-nea.github.io/Nosy.jl/dev/concepts/building-snapshot/).

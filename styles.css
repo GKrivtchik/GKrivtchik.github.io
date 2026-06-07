@@ -137,13 +137,12 @@ a:hover {
 }
 
 #quarto-document-content > ul {
-  padding-left: 0;
-  list-style: none;
+  padding-left: 1.35rem;
+  list-style: disc;
 }
 
 #quarto-document-content > ul > li {
   margin-bottom: 0.75rem;
-  text-align: left;
 }
 
 .quarto-listing-category-title,
