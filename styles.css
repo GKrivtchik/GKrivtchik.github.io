@@ -214,6 +214,26 @@ a:hover {
   vertical-align: baseline;
 }
 
+.quarto-listing-default .body:has(> .listing-description) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.quarto-listing-default .body:has(> .listing-description) .listing-title {
+  order: 1;
+}
+
+.quarto-listing-default .body:has(> .listing-description) .listing-description {
+  order: 2;
+}
+
+.quarto-listing-default .body:has(> .listing-description) .listing-categories {
+  order: 3;
+  display: flex;
+  margin: 0.35rem 0 0;
+}
+
 .quarto-listing-default .listing-category {
   display: inline-flex;
   align-items: center;
@@ -237,6 +257,7 @@ a:hover {
   margin-top: 0.25rem;
   color: var(--muted);
   font-size: 0.93rem;
+  font-style: italic;
 }
 
 .quarto-listing-default .listing-description p {
