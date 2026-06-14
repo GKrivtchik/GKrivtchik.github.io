@@ -1,0 +1,65 @@
+---
+title: "Heterogeneous time meshes for MILP energy systems modelling"
+description: "Reducing the computational burden in energy systems modelling using heterogeneous time meshes"
+date: 2026-06-14
+categories: [energy systems, MILP, optimization]
+---
+
+In MILP optimization of energy systems, the computational burden of the optimization, generally referred to as "solve time", is a prime pain point. 
+Outside of simple examples or benchmark cases, the modelling accuracy of most real problems is limited by the solve time. This is by design, as one can see the maximum solve time as a budget, and add as much information and complexity as possible while remaining under the budget.
+Every addition or change to a model has to be carefully implemented and tested to check the impact on the solve time. 
+
+Solve time in MILP problems is difficult to estimate, in particular because they're extremely difficult problems solved with extremely smart heuristics, and finding a solution feels like luck. Nevertheless, reducing the number of variables without introducing complexity generally decreases the solve time[^1].
+
+[^1]: Although many factors beyond variables influence the solve time of a MILP problem.
+
+One large source of variables is the time scope. Modelling one full year with hourly resolution generates 8760 variables per series. 100 such series are almost sufficient to reach one million variables, which is one of the fuzzy limits to start calling a problem "difficult". 
+
+In what follows, I will call "time mesh" the vector of time step durations. For instance, for the hourly modelling of a year, the time mesh will be $\mathrm{mesh} = [1, 1, \ldots, 1]$ with length 8760.
+There are cases where modelling time with a coarser time mesh is a good approximation, and there are multiple degrees of complexity associated with that task[^2].
+
+[^2]: I will not detail the "time slices" practice, which is a different exercise where one horizon is divided into multiple non-contiguous representative sub-horizons.
+
+I will also call "collapsing" the time mesh the process of reducing the number of time steps while maintaining the total duration. The reflections below are based on [Nosy](https://oecd-nea.github.io/Nosy.jl), which uses the power formalism[^3], under which power (or other flows) are lineary interpolated over the intervals. In particular, for a model under power formalism, the effect of mesh collapsing is quite transparent: a time step longer than one hour will simply imply that power will be linearly interpolated for the duration above one hour. 
+
+[^3]: As opposed to the "energy" formalism, where the basic quantity is the amount of energy flowing during a time step.
+
+The first example of time mesh reduction is using a uniformly coarser time mesh. For instance, modelling 1 hour time steps, one can model 2 hours time steps: $\mathrm{mesh} = [2, 2, \ldots, 2]$ with length 4380. It may be a valid approximation, however the precision of some phenomena at the hourly scale will be degraded, such as variability of PV production, or ramping constraints. 
+
+A more involved example detailed in [Nosy's docs](https://oecd-nea.github.io/Nosy.jl/dev/examples/heterogeneous-mesh/) is using heterogeneous time meshes. The system is composed of PV, battery storage and consumption with a flat profile, on a one-year horizon; it performs greenfield capacity expansion and dispatch to match consumption. It is modelled under three time meshes: one is a fine hourly resolution over the full year, the second is a coarser two-hour resolution and the last one is heterogeneous and uses 18 hourly time steps during the day and 3 two-hour time steps at night. The results are in the table below.
+
+The results show that the coarse time mesh returns different results and objective from the fine time mesh, but the heterogeneous time mesh returns the same results (within reported precision) as the fine mesh (same objective value, same capacity expansion for battery and PV). This result is interesting because the problem with heterogeneous time mesh has a 12.5% lower number of variables, directly resulting in a reduced solve time[^4] (solve time based on using HiGHS solver).
+
+[^4]: MILP solve time is noisy, so results may vary.
+
+| Mesh | PV capacity | Storage capacity | Objective value | Variables | Solve time (s) |
+|:--|--:|--:|--:|--:|--:|
+| Hourly | 1.768 | 1.504 | 2.069 | 26,282 | 3.284 |
+| 2-hour | 1.770 | 1.404 | 2.050 | 13,142 | 0.757 |
+| Heterogeneous | 1.768 | 1.504 | 2.069 | 22,997 | 2.451 |
+
+: Comparison of three time meshes for the PV-battery example. Units are unimportant except for solve time.
+
+
+A plausible reason is that at night, the variation from one hour to the next of PV production is zero, therefore the system works in a static manner at night, the only exception being the battery storage level getting lower. Static behavior is compatible with using larger time steps at some hours without degrading the results. 
+
+The example above was a very clear case of when to use heterogeneous time meshes. However, all problems are not simple enough to contain periods with static behavior. In particular, when modelling country-scale power systems, consumption is not flat, even at night. However, a static behavior is not a required condition for the time collapsing to work. 
+
+One target is to find when the system is most stable. But that alone is generally not sufficient. Let's assume that the problem is a cost-optimization. When you collapse hours, you also introduce bias, because complex systems rarely are purely static. And the bias you introduce is related to the marginal cost of operating the system at the time of collapsing, or more precisely, the shadow price. Intuitively, the reason is that the shadow price is the local derivative of your system's objective against variation of consumption minus production. Should your approximation misrepresent the actual consumption or production, the bias generated will, in the vicinity of the optimal solution, be proportional to the shadow price.
+
+Price can be used as an indicator for when to collapse time steps. When the price is stable, it hints at good stability, and when the absolute value of the price is low, it hints at low impact of bias. Obviously, having access to the shadow price generally implies that you have already solved a version of the problem. But there are many workflows where the solution is not one-shot, but incrementally refined by screening out unused technologies, removing relaxation etc. If you can afford to solve one initial LP relaxation of the MILP problem, you can derive the (shadow) price from it and use it to feed a time mesh collapsing process that will facilitate the next stages of the workflow, e.g. solving the MILP with the heterogeneous time mesh.
+
+This is generally not a straightforward process though. One reason is that there are likely to be multiple nodes with shadow prices, so it is necessary to design an aggregation method that works for the case. Also, since these are two distinct targets (lowest prices and most stable prices), you will need to find the correct recipe, which also is problem-dependent.
+
+A practical workflow is:
+
+1. Solve an LP relaxation at full hourly resolution.
+2. Extract nodal shadow prices and relevant exogenous profiles.
+3. Aggregate prices across nodes if the model has several relevant shadow prices.
+4. Identify candidate periods to collapse, for instance adjacent hours in the 20% quantile of most stable prices while price remains under a threshold.
+5. Collapse only those intervals, with a maximum allowed step length.
+6. Solve the MILP on the resulting heterogeneous mesh.
+
+Obviously validation of the results has to be part of the workflow too.
+
+I will summarize this post by saying that the value of temporal resolution is uneven. Heterogeneous time meshes exploit that unevenness: they keep detail where the system is sensitive, and collapse periods where the approximation is unlikely to affect investment or dispatch decisions.
