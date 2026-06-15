@@ -4,7 +4,6 @@ listing:
   contents: posts/*/index.qmd
   sort: "date desc"
   type: default
-  max-items: 3
   fields: [title, categories, date]
   categories: true
   feed: true
