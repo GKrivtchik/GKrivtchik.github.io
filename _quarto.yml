@@ -28,6 +28,7 @@ format:
   html:
     theme: cosmo
     css: styles.css
+    canonical-url: true
     toc: false
     code-copy: true
     anchor-sections: true
