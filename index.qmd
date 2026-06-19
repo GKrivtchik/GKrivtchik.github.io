@@ -26,4 +26,9 @@ Prev: modelling engineer @ Terra Praxis, research engineer @ CEA
 - [Nosy.jl](https://github.com/oecd-nea/Nosy.jl): composable, component-based energy system modeling and optimization toolkit
 - [NuclearFuelScenario.jl](https://github.com/GKrivtchik/NuclearFuelScenario.jl): small and fast nuclear fuel model for supply chain analysis
 
+## Contact
+
+Questions, corrections, or opportunities: [email me](mailto:guillaume@gkrivtchik.com)
+
+
 ## Blog
