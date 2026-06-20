@@ -20,6 +20,7 @@ website:
         href: https://www.linkedin.com/in/guillaume-krivtchik-29b96693/
   page-footer:
     left: "Guillaume Krivtchik"
+    center: "Opinions expressed here are my own and do not reflect the views of my employer."
     right:
       - text: rss
         href: posts/index.xml
