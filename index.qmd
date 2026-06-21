@@ -16,14 +16,15 @@ title-block-style: none
 
 I build tools for analysis and decision-making.
 
-Current: energy systems modelling engineer @ OECD - Nuclear Energy Agency
+Current job: energy systems modelling engineer @ OECD - Nuclear Energy Agency
 
-Prev: modelling engineer @ Terra Praxis, research engineer @ CEA
+Previously: energy systems modelling engineer @ Terra Praxis, research engineer @ CEA
 :::
 
 ## Projects
 
 - [Nosy.jl](https://github.com/oecd-nea/Nosy.jl): composable, component-based energy system modeling and optimization toolkit
+- [EnergyPathway.jl](https://github.com/GKrivtchik/EnergyPathway.jl): capacity expansion pathway layer built on top of Nosy.jl
 - [NuclearFuelScenario.jl](https://github.com/GKrivtchik/NuclearFuelScenario.jl): small and fast nuclear fuel model for supply chain analysis
 
 ## Contact
