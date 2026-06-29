@@ -1,0 +1,39 @@
+<script>
+(function () {
+  // Quarto renders post title categories as static chips; upgrade them into
+  // links that open the blog listing with the matching category filter active.
+  function blogIndexUrl(category) {
+    const blogLink = Array.from(document.querySelectorAll(".navbar a.nav-link"))
+      .find(function (link) {
+        return link.textContent.trim().toLowerCase() === "blog";
+      });
+    const url = new URL(
+      blogLink ? blogLink.getAttribute("href") : "/posts/",
+      window.location.href
+    );
+    // This hash format is what Quarto's listing script reads on the blog page.
+    url.hash = "category=" + encodeURIComponent(category);
+    return url.href;
+  }
+
+  document
+    .querySelectorAll(".quarto-title .quarto-categories .quarto-category")
+    .forEach(function (categoryEl) {
+      if (categoryEl.tagName.toLowerCase() === "a") {
+        return;
+      }
+
+      const category = categoryEl.textContent.trim();
+      if (!category) {
+        return;
+      }
+
+      const link = document.createElement("a");
+      link.className = categoryEl.className;
+      link.href = blogIndexUrl(category);
+      link.textContent = category;
+      link.setAttribute("aria-label", "View posts tagged " + category);
+      categoryEl.replaceWith(link);
+    });
+})();
+</script>

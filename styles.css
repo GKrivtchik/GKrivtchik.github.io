@@ -93,6 +93,16 @@ main.content {
   text-transform: none;
 }
 
+.quarto-title a.quarto-category {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.quarto-title a.quarto-category:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .quarto-title-meta {
   color: var(--muted);
 }

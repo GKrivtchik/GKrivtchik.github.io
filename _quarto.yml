@@ -34,6 +34,7 @@ format:
     code-copy: true
     anchor-sections: true
     smooth-scroll: true
+    include-after-body: scripts/post-category-links.html
 
 execute:
   freeze: auto
