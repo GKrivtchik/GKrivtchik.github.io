@@ -20,7 +20,7 @@ There are cases where modelling time with a coarser time mesh is a good approxim
 
 [^2]: I will not detail the "time slices" practice, which is a different exercise where one horizon is divided into multiple non-contiguous representative sub-horizons.
 
-I will also call "collapsing" the time mesh the process of reducing the number of time steps while maintaining the total duration. The reflections below are based on [Nosy](https://oecd-nea.github.io/Nosy.jl), which uses the power formalism[^3], under which power (or other flows) are lineary interpolated over the intervals. In particular, for a model under power formalism, the effect of mesh collapsing is quite transparent: a time step longer than one hour will simply imply that power will be linearly interpolated for the duration above one hour. 
+I will also call "collapsing" the time mesh the process of reducing the number of time steps while maintaining the total duration. The reflections below are based on [Nosy](https://oecd-nea.github.io/Nosy.jl), which uses the power formalism[^3], under which power (or other flows) are linearly interpolated over the intervals. In particular, for a model under power formalism, the effect of mesh collapsing is quite transparent: a time step longer than one hour will simply imply that power will be linearly interpolated for the duration above one hour. 
 
 [^3]: As opposed to the "energy" formalism, where the basic quantity is the amount of energy flowing during a time step.
 

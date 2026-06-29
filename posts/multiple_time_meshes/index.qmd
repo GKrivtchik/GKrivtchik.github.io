@@ -35,8 +35,9 @@ Nosy supports defining a different mesh to each component and node. The tricky p
 Nodes generally do not carry variables, but their mesh defines the way the node balance is enforced. To be more accurate, the gain is not coming from modelling nodes with a coarser mesh, as the number of non-zeros in the optimization matrix is not really impacted by modelling nodes on a coarse or fine mesh. The gain is coming from modelling components using a coarser mesh. A component using a coarser mesh generally has a lower number of optimization variables and constraints. The exact reduction depends on the nature of the component, and the way its behaviour is encoded, but the reduction of the number of variables is often almost proportional with the ratio of timesteps in the meshes.
 
 In the present case, we can try using two meshes: $m_1$ is hourly and $m_4$ uses 4-hour time steps, and assign them the following way:
-  * $m_1$ for PV, battery, electricity consumption, electricity node and electrolyser.
-  * $m_4$ for H2 storage, H2 consumption and the H2 node.
+
+- $m_1$ for PV, battery, electricity consumption, electricity node and electrolyser.
+- $m_4$ for H2 storage, H2 consumption and the H2 node.
 
 In particular, the electrolyser uses the fine mesh, although it is connected to both nodes. This is an interesting feature, because it keeps the temporal consistency of everything happening on the electricity side, while being compatible with the coarser hydrogen node. 
 

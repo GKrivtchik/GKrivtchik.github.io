@@ -1,11 +1,16 @@
 project:
   type: website
   output-dir: docs
+  resources:
+    - favicon.ico
 
 website:
   title: "Energy modelling blog"
   site-url: "https://gkrivtchik.com"
   description: "A personal website and blog about energy systems modelling"
+  open-graph: true
+  twitter-card: true
+  favicon: favicon.ico
   search: false
   navbar:
     title: false

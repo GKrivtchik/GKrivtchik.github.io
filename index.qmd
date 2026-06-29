@@ -6,7 +6,7 @@ listing:
   type: default
   fields: [title, categories, date]
   categories: true
-  feed: true
+  feed: false
 page-layout: article
 title-block-style: none
 ---
@@ -14,16 +14,15 @@ title-block-style: none
 ::: {.home-intro}
 # Guillaume Krivtchik
 
-I build tools for analysis and decision-making.
+I build modelling and optimization tools for energy systems.
 
-Current job: energy systems modelling engineer @ OECD - Nuclear Energy Agency
+I currently work on energy systems modelling at the OECD Nuclear Energy Agency.
 
-Previously: energy systems modelling engineer @ Terra Praxis, research engineer @ CEA
-:::
+Before that: energy systems modelling at Terra Praxis; nuclear fuel cycle scenarios modelling at CEA.
 
 ## Projects
 
-- [Nosy.jl](https://github.com/oecd-nea/Nosy.jl): composable, component-based energy system modeling and optimization toolkit
+- [Nosy.jl](https://github.com/oecd-nea/Nosy.jl): composable, component-based energy system modelling and optimization toolkit
 - [EnergyPathway.jl](https://github.com/GKrivtchik/EnergyPathway.jl): capacity expansion pathway layer built on top of Nosy.jl
 - [NuclearFuelScenario.jl](https://github.com/GKrivtchik/NuclearFuelScenario.jl): small and fast nuclear fuel model for supply chain analysis
 
@@ -31,5 +30,6 @@ Previously: energy systems modelling engineer @ Terra Praxis, research engineer 
 
 Questions, corrections, or opportunities: [email me](mailto:guillaume@gkrivtchik.com)
 
+:::
 
 ## Blog
