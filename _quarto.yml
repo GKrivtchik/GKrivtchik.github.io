@@ -3,6 +3,8 @@ project:
   output-dir: docs
   resources:
     - favicon.ico
+    - favicon-16x16.png
+    - favicon-32x32.png
 
 website:
   title: "Energy modelling blog"
@@ -10,7 +12,6 @@ website:
   description: "A personal website and blog about energy systems modelling"
   open-graph: true
   twitter-card: true
-  favicon: favicon.ico
   search: false
   navbar:
     title: false
@@ -39,6 +40,7 @@ format:
     code-copy: true
     anchor-sections: true
     smooth-scroll: true
+    include-in-header: scripts/favicon-links.html
     include-after-body: scripts/post-category-links.html
 
 execute:
