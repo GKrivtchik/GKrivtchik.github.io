@@ -1,0 +1,124 @@
+---
+title: "Interactions between behaviours in capacity expansion and dispatch models"
+description: "How to manage interactions among capacity, unit commitment, costs, etc."
+date: 2026-07-14
+categories: [energy systems, MILP, optimization, architecture, Julia]
+---
+
+This post explains how the capacity expansion and dispatch model [Nosy](https://github.com/oecd-nea/Nosy.jl) manages interactions between behaviours when building model components. For a more general introduction to Nosy's architecture and the reasons why I designed it that way, you can check [this post](../designing_models/).
+
+In this post, I use "behaviour" to mean a simple component feature that serves as a building block. There are many different behaviours, including variable capacity, fixed capacity, variable cost, fixed cost, unit commitment, ramping etc. The exhaustive list is available in the appendix of this post.
+
+In capacity expansion and dispatch models, non-trivial components result from the application of multiple behaviours[^1]. For instance, Nosy uses explicit composition of one model archetype[^2] and as many behaviours as required. This architecture makes the interaction of behaviours more explicit than other architectures, but this interaction has to be handled in every capacity expansion and dispatch model, one way or another.
+
+[^1]: There actually is another type of building block for components in Nosy, adjacent to behaviours: the [joint flows](https://oecd-nea.github.io/Nosy.jl/dev/concepts/building-snapshot/#Joint-Flows), that will be described in a separate post.
+
+[^2]: The list of model archetypes in Nosy is detailed [here](https://oecd-nea.github.io/Nosy.jl/dev/concepts/building-snapshot/#Model-Archetype).
+
+Behaviours encapsulate a single facet of how a component exists or interacts with the rest of the system. However, designing their scope is not always trivial. Some of the behaviours only target a single notion e.g. fixed capacity, while others manage a small bundle of parameters e.g. unit commitment also manages minimum uptimes and downtimes.
+I wanted behaviours to be as small and conceptually orthogonal as possible, to minimize the complexity of the building blocks of components - at least for the user. Of course, splitting functionality into small, simple behaviours does not reduce the mathematical complexity; instead  it shifts the responsibility for coordinating those behaviours from the user to the internal model-building logic. 
+
+Before discussing how behaviours interact, I also need to define the concept of port: a `Port` is a connection point on a component; it carries a specific carrier and represents its flow as a time series. In Nosy, most behaviours actually target specific ports of a component. For instance, the capacity is not defined for the whole component; it is applied specifically to one of its ports.
+
+Nosy currently has 16 user-facing behaviours. The full list is provided in the [appendix](#appendix-behaviours-in-nosy); their documentation is available [here](https://oecd-nea.github.io/Nosy.jl/dev/concepts/building-snapshot/#Behaviors).
+
+Let's consider the simple example of a PV field with optimisable capacity. We will model it as
+
+- a `ProfileSource` model archetype associated with a time series, which defines something that outputs a flow following a predefined pattern;
+- a `VariableCapacity` behaviour that will create a capacity variable and tie it to the component's capacity;
+- a `FixedCost` behaviour that will generate an annualized investment cost proportional to capacity.
+
+Let $C$ be the installed PV capacity, $\phi_t$ the availability profile, $p_t$ the output at time $t$, and $c^\text{inv}$ the annualized investment cost per unit of capacity. Together, the archetype and behaviours add the following terms to the model:
+
+$$
+p_t = \phi_t C \qquad \forall t,
+$$
+
+$$
+cost = c^\text{inv} C.
+$$
+
+The `ProfileSource` provides $\phi_t$, `VariableCapacity` creates $C$ and uses it to define the output profile, and `FixedCost` retrieves the same $C$ to construct the investment cost. The capacity must therefore be built before the fixed cost.
+
+The actual implementation of this component is detailed [here](https://oecd-nea.github.io/Nosy.jl/dev/examples/pv-battery-storage/) in the examples section of the docs.
+
+Components can be more complex than that, and in detailed studies like the system cost study of Sweden (available [here](https://www.oecd-nea.org/upload/docs/application/pdf/2026-03/system_cost_study_of_sweden.pdf)), they can routinely include up to 20 behaviours, often with multiple instances of fixed and variable costs. 
+
+The dependency in the PV example is small, but it establishes the general problem: behaviours cannot always be built in the order supplied by the user. Nosy therefore needs a deliberate build order.
+
+There are multiple ways to manage such interactions. One elegant way would have been a dependency-resolution mechanism. For instance, I could have implemented the dependencies below:
+
+```julia
+abstract type Dependency end
+abstract type Capacity <: Dependency end
+requires(::FixedCost) = (Capacity,)
+provides(::FixedCost) = () # no provision
+requires(::VariableCapacity) = () # no requirement
+provides(::VariableCapacity) = (Capacity,)
+```
+
+I could then build a DAG (hopefully) and topologically sort it. I like it, it looks fancy, but it is clearly overkill for Nosy. I decided to go against it because the total number of behaviours is small enough that another layer of abstraction was not necessary - the dependency graph is simple enough that it can be explicitly written. 
+
+I hard-coded the build order shown below[^3]. For all model archetypes except `ProfileSource` and `ProfileSink`, the build order is:
+
+[^3]: Small caveat: for `ProfileSource` and `ProfileSink` model archetypes, the build order is slightly changed. So there are actually two build orders. I still find that the hard-coded chain is adequate. 
+
+`CapacityMultiplier` → capacity behaviours → `Duration` → `UnitCommitment` → all remaining behaviours
+
+This build order is quite simple and understandable. The general flow is that capacities are required to design unit commitment, and the other behaviours' constructors[^4] are independent of one another but may depend on capacities and unit commitment. The build order's maintenance cost is explicit: whenever a new behaviour is added, its interactions with the existing behaviours must be examined before it can be placed in the sequence.
+
+[^4]: The build order concerns the construction of behaviours. First, all behaviours are constructed, and only after that some behaviours generate constraints. When generating constraints, some behaviours also look for the existence of other behaviours. For instance, reserve behaviours intuitively depend on ramping behaviour; however they don't require it at construction, only during constraints generation.
+
+However, the build order itself does not explain why one behaviour must precede another. To reason about these interactions, I find it useful to distinguish two kinds of dependencies: hard requirements and conditional requirements. A hard requirement means that a behaviour is invalid when another behaviour is missing; a conditional requirement means that the behaviour remains valid on its own, but changes when another behaviour is present.
+
+The table below names these dependencies directly.
+
+| Behaviour | Hard requirement | Conditional requirement |
+|---|---|---|
+| `VariableCapacity` | – | `CapacityMultiplier` |
+| `VariableComposedCapacity` | – | `CapacityMultiplier` |
+| `FixedCapacity` | – | `CapacityMultiplier` |
+| `FixedComposedCapacity` | – | `CapacityMultiplier` |
+| `CapacityMultiplier` | a capacity | – |
+| `Duration` | a capacity | – |
+| `UnitCommitment` | a capacity | – |
+| `Ramping` | – | a capacity, `UnitCommitment` |
+| `YearlySum` | – | – |
+| `ReserveUp` | a capacity | `UnitCommitment`, `Ramping` |
+| `ReserveDown` | a capacity | `UnitCommitment`, `Ramping` |
+| `VariableCost` | – | – |
+| `FixedCost` | a capacity | – |
+| `ConstantCost` | – | – |
+| `NoLoadCost` | `UnitCommitment` | – |
+| `StartupCost` | `UnitCommitment` | – |
+
+These dependencies are handled at different stages: most hard requirements are checked during construction, whereas most conditional requirements alter constraint generation. Julia’s multiple dispatch makes these interactions straightforward to implement.
+
+There are some more requirements than the table shows. For instance, `UnitCommitment` requires that a capacity defines the unit size; in addition, most behaviours are not properties of the whole component but of a port in particular, and the requirements are actually bound to the port and not the component. But for a simple mental model, the table is accurate enough.
+
+All in all, for capacity expansion and dispatch, a behaviour should not be designed in isolation. Adding a behaviour requires identifying what it needs from other behaviours, as well as how its equations change when other behaviours are present, and vice versa.
+
+Composing components from small behaviours makes the interactions explicit. In Nosy, the dependency graph is sparse and largely structured around capacity and unit commitment. As such, a fixed build order is easier to understand and maintain than a dependency-resolution mechanism. The explicit build order approach might eventually stop scaling if the number of behaviours grows substantially and new behaviours interact heavily with the others, but I doubt that this will happen. For now, the explicit build order, coupled with the requirement matrix, seems to provide the right level of abstraction: it is simple enough to inspect, and structured enough to manage components composed of many interacting behaviours. 
+
+## Appendix: Behaviours in Nosy
+
+Nosy currently provides the following 16 user-facing behaviours:
+
+1. `VariableCapacity`: constrain the flow through a target port by a single capacity variable.
+2. `VariableComposedCapacity`: constrain the weighted sum of the flows through target ports by a single capacity variable.
+3. `FixedCapacity`: constrain the flow through a target port by a fixed capacity.
+4. `FixedComposedCapacity`: constrain the weighted sum of the flows through target ports by a fixed capacity.
+5. `CapacityMultiplier`: multiply a capacity by a time-dependent vector.
+6. `Duration`: define a linear relationship between port capacities and the maximum level.
+7. `UnitCommitment`: apply the unit commitment equations to a port.
+8. `Ramping`: set the maximum ramping rate of a port.
+9. `YearlySum`: impose an upper bound, lower bound, or equality constraint on the sum of a target port's flow.
+10. `ReserveUp`: allow a component port to contribute to upward reserve.
+11. `ReserveDown`: allow a component port to contribute to downward reserve.
+12. `VariableCost`: add a cost based on the flow through a component port.
+13. `FixedCost`: add a cost based on a component's capacity.
+14. `ConstantCost`: add a constant amount to a component's cost.
+15. `NoLoadCost`: add a cost based on a component's `up` unit commitment state.
+16. `StartupCost`: add a cost based on a component's `starting` unit commitment switch.
+
+So far, this set has been sufficient to create hundreds of components for various studies.
