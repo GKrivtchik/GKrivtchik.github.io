@@ -1,0 +1,248 @@
+---
+title: "How to model nuclear power plants in energy system models"
+description: "Modelling large PWRs in capacity expansion and dispatch models: costs, unit commitment, ramping, refuelling, outages, reserves. Analysis and implementation using Nosy"
+date: 2026-07-26
+categories: [nuclear, energy systems, unit commitment, optimization, refuelling]
+---
+
+
+In this post, I focus on modelling a nuclear reactor in a capacity expansion and dispatch model. There are multiple types and technologies of nuclear reactors; all details will refer to the most common type of reactor so far: large (GW-scale) pressurized water reactors (PWRs). I will assume that the reactor's purpose is to generate electricity. I'm also assuming centralized planning via least-cost optimization, not modelling the remuneration of the operator.
+
+As this is a modelling post, I leave the most dense physical explanations in end notes. This editorial choice caused me a great deal of suffering.
+
+# Modelling considerations
+
+## Costs
+
+I will not emphasize cost values. Instead, I suggest that you compare the various values provided by international organizations, vendors and academics. In this post, I will use costs from the 2020 edition of the OECD report series "[Projected Cost of Electricity](https://www.oecd.org/en/publications/projected-costs-of-generating-electricity_20798393.html)".
+
+The nuclear cost structure is dominated by CAPEX: investment costs are very high because overnight costs are high and lead times (in particular, construction time) are long. There is no single true value for either of them. In addition, there is a heated debate on the series effect: will the costs of new builds decline as more units are built? I will not contribute to the debate in this post; however, it is common to find both first-of-a-kind (FOAK) and nth-of-a-kind (NOAK) costs with substantially different values.
+
+Multiple countries are currently engaging in or considering Long-Term Operation (LTO) of nuclear reactors.
+LTO consists of extending the life of a nuclear reactor, generally toward the end of its expected lifetime. It involves extensive testing followed by a very substantial refurbishment. For instance, the steam generator can be replaced if necessary. Other parts include the vessel upper head and turbines. The cost of LTO is not the same for every reactor, but extending the lifetime of an existing nuclear reactor is often the least-cost option for low-CO2 firm power. An LTO operation is expected to extend the lifetime of an existing nuclear reactor by about 20 years.
+
+The division of O&M costs between variable and fixed depends on who publishes them.
+Some experts prefer to model the O&M costs of nuclear as purely fixed. Indeed, performing load following with a reactor instead of using it at full capacity tends to increase the O&M costs instead of reducing them. Indeed, the savings on consumables are small compared with the additional staffing costs associated with the complexity of operating a load-following reactor, particularly when startups and shutdowns are involved.
+
+Fuel costs are relatively small, but not negligible. For UOX PWRs, fuel costs are mostly linked to the costs (or prices) of natural uranium and enrichment. In most PWRs, one fuel cycle is about 1.5 years, with fuel batches staying in-core for 3 or 4 cycles.
+Interestingly, and for reasons similar to those for O&M, it is not unthinkable to model nuclear fuel costs as fixed, depending on the rest of the model. In particular, as refuelling time is planned in advance, using less of the fuel will not result in a lower cost—the fuel will be replaced at the same time anyway—as fuel costs are sunk as soon as the refuelling windows are scheduled. I would recommend modelling the fuel as fixed for short-term dispatch studies, but variable for capacity expansion studies, as the long-term refuelling window can be optimized if the operator anticipates that the average power output will be low.
+
+Sometimes coupled with the fuel costs are the internalized nuclear waste management costs. They represent a substantial fraction of the fuel costs. They should be modelled the same way as fuel costs.
+
+Decommissioning costs are generally modelled as a percentage of the overnight construction cost, heavily discounted as decommissioning will take place in the future.
+
+Grid connection costs of nuclear are generally moderate. However, because of their gigawatt scale, they require a well-developed grid to support transmission of that power. Connection costs are site-related.
+
+## Capacity
+Large nuclear reactors indeed have a high net electrical capacity, generally around 1.5 GW for many recent designs. Average capacity of older generations is closer to 1 GW.
+
+Because unit capacity is large, when modelling capacity expansion of a nuclear fleet, the results tend to be sensitive to a linear relaxation of the number of units. This is particularly true if the unit size is not small compared with key parts of the system including consumption, residual load, and the grid capacity.
+
+## Unit commitment and ramping
+
+A nuclear reactor can have many stages, including cold shutdown, hot shutdown, running, islanding, etc., which are linked together through complex procedures. However, one does not generally need all these stages for a capacity expansion and dispatch study. 
+As far as electricity generation is concerned, nuclear is compatible with relatively simple unit commitment forms.
+
+Many nuclear reactor designs are technically capable of adjusting their power output. Not all operators choose to use this capability, as operating a reactor flexibly involves additional regulatory requirements, which are neither free nor easy to implement. Because of that, some nuclear reactors are basically operated in "must-run" mode, while others are operated flexibly. The French company EDF is probably the most notable example of operating a nuclear fleet in a flexible way, which is connected to the very high share of nuclear in the French electricity mix (up to 78% in 2005).
+
+Ramping capabilities of PWRs are actually pretty high. The exact capabilities depend on regulations and fuel factors, but the ballpark is 2–5% per minute. The minimum stable power of a nuclear reactor is about 20–30% of the nominal capacity most of the time. Toward the end of the fuel irradiation cycle, as fuel reactivity is low because the fissile part of the fuel is mostly consumed[^1], the concentration of boron in the primary cooling circuit must be reduced to maintain criticality. When the boron concentration is low, the minimum stable output is not allowed to be too low. The reason is quite complex and is linked to the fact that cores at low boron concentrations are less manoeuvrable[^2].
+All in all, a PWR is capable of going from minimum stable power to full power within one hour. 
+
+[^1]: For fresh fuel, it's only ^235^U. However, the ^238^U nuclides may capture a neutron and then decay to ^239^Pu, which is also a fissile nuclide. In large PWRs, ^239^Pu actually contributes 30% of the fission energy on average, and that share increases toward the end of the fuel cycle. But it doesn't change the fact that, to first order, reactivity linearly declines with current burnup. Furthermore, ramping is not available during stretch, which consists of slightly extending the fuel's stay in-core.
+
+[^2]: For more explanations, you can check this [NEA report](https://www.oecd-nea.org/upload/docs/application/pdf/2021-12/technical_and_economic_aspects_of_load_following_with_nuclear_power_plants.pdf).
+
+There is a technical limit to the number of ramping cycles, or more precisely to the cumulative number of upward ramps, due to the interaction between the fuel pellets and the cladding[^3]. The ramping budget varies between studies and operators. Some studies[^4] mention 30 deep modulations per fuel cycle, which is equivalent to about 20 per reactor per year, while other documents indicate much higher thresholds.
+In particular, this [NEA report](https://www.oecd-nea.org/upload/docs/application/pdf/2021-12/technical_and_economic_aspects_of_load_following_with_nuclear_power_plants.pdf) cites the European Utility Requirements (EUR), which require designs to accommodate 200 scheduled load variations per reactor per year; the NEA report also indicates that many designs comply, including EPR, AP1000, VVER-1000.
+
+[^3]: To ramp up, the specific power of the fuel rises. This increases the temperature in the heating elements, namely the fuel pellets. Ultimately, the fuel cladding's temperature will also rise, but this is not immediate. Temperature makes the fuel pellets expand faster than the cladding. During steady-state operation, the fuel pellets are in contact with the cladding. Ramping up causes the pellets to push on the cladding, inducing material stress. The cladding is designed to resist this type of stress under irradiation and in very corrosive conditions, with water at more than 270 degrees Celsius on the outside and fission products on the inside. However, its ability to withstand this stress is not unlimited and can, in a very simplified way, be represented as a budget. This [IAEA document (page 62)](https://www-pub.iaea.org/MTCD/publications/PDF/TE-1960web.pdf) states that the Belgian reactors are allowed 30 modulations per fuel cycle, which implies about 20 modulations per year. This budget is likely only a proxy, though, as EDF mentions that the weight of the cycle depends on its depth. Many interesting details on ramping capabilities are given in this [EDF report](https://www.edf.fr/sites/groupe/files/2026-02/2026_02_16_ETUDE_MODULATION.pdf).
+
+[^4]: Source: this [IAEA document (page 62)](https://www-pub.iaea.org/MTCD/publications/PDF/TE-1960web.pdf)
+
+That being said, I generally do not explicitly constrain the number of ramping cycles. I prefer to optimize the system and then check the ramps. I also like to check the difference between optimization results with ramping and with must-run mode. Usually, the cost difference is small - of course this depends on many parameters including the size of the nuclear fleet and the shape of the residual load. 
+
+The cold startup procedure is considerably slower than ramping. The actual duration depends on regulations, but 12 hours is acceptable. As with ramping, there is a budget associated with the number of cold startups; however, it is linked to component fatigue: the budget is for the reactor lifetime, not the fuel cycle. It is difficult to find data for all concepts, but, for instance, this [NRC document](https://www.nrc.gov/docs/ML1034/ML103480518.pdf) shows that the AP1000 has a lifetime budget of 2,000 cold starts (about 30 per year).
+
+In the French fleet, power modulation is much more frequent than dispatch-driven shutdowns and startups. The same [EDF report](https://www.edf.fr/sites/groupe/files/2026-02/2026_02_16_ETUDE_MODULATION.pdf) mentions that, in 2023, there were 25–30 power modulation cycles per reactor, compared with approximately 1.3 dispatch-driven full shutdowns per reactor.
+
+Shutting down a reactor is faster; it can be done in about one hour. Technically, this is the transition to the "hot shutdown" state, where the reactor generates no electricity, but the primary circuit is still hot and pressurized. A cold shutdown takes longer (about 20 hours), but as far as electricity generation is concerned, it doesn't make a meaningful difference, so a one-hour shutdown is fine.
+
+PWRs don't have a minimum uptime. They tend to stay up for long durations, but this comes from economic incentives.
+However, modelling the minimum downtime of PWRs is both very important for capacity expansion studies and non-trivial. 
+First, PWRs have a relatively long minimum downtime, due to a very non-trivial physical phenomenon: the "xenon effect[^5]". I generally use the conservative value of 24 hours, but restarting the reactor can sometimes happen earlier. The same [EDF report](https://www.edf.fr/sites/groupe/files/2026-02/2026_02_16_ETUDE_MODULATION.pdf) mentions that the minimum is usually between 12 and 24 hours, but sometimes only 6 hours.
+
+[^5]: When a nuclear reactor is running, fission continuously generates ^135^Xe, a gaseous fission product. More precisely, ^135^Xe is produced through a decay chain of multiple nuclides, including ^135^I, whose half-life is 6.6 hours. ^135^Xe is a "neutronic poison", meaning that it has a very high neutron capture cross-section. This gas is contained by the cladding; it does not leak out, and there is no way to recover it while the fuel is in-core. As a neutronic poison, xenon is also continuously consumed by neutron capture during irradiation, which keeps its concentration fairly low. However, when irradiation stops as the reactor shuts down, the ^135^I present in the fuel keeps decaying into ^135^Xe, but the latter is no longer consumed because the neutron flux is almost zero. Therefore, ^135^Xe starts accumulating after shutdown. This is a transient effect, as the half-life of ^135^Xe itself is 9.1 hours. But there is a 24 h interval during which xenon builds up to levels higher than during irradiation, with a peak about 9 h after shutdown. Starting the reactor again is not allowed when Xe levels are high. Because it is a neutronic poison, ^135^Xe reduces the criticality of the core. To restart the chain reaction, it would be necessary to increase the core reactivity through the reactivity control mechanisms: withdrawing control rods or reducing the boron concentration in the primary coolant. But neither of these mechanisms can be pushed too far. Control rods are necessary to maintain key physical effects (power distribution, local temperature) and can't be removed entirely, whereas modifying the boron concentration is a slow, fluid-based mechanism with many constraints. All in all, the operator must wait for ^135^Xe to return to its pre-shutdown level, which takes about 24 hours. As a consequence, the minimum downtime of a PWR should be about 24 hours. In practice, it can be shorter, between 12 and 24 hours - intermediate levels of Xenon can be managed. One last note: when the reactor has just reached the hot-shutdown state, ^135^Xe buildup has not started yet. Therefore, it is possible to restart it immediately. However, although technically feasible, this is exotic and I do not believe that this meaningfully contributes to capacity expansion studies - I don't want to overestimate the flexibility of nuclear for such studies.
+
+
+## Refuelling
+
+There is another phenomenon that I generally also model as a minimum downtime: refuelling. Every year and a half or so, nuclear reactors have to shut down for a long duration. The world average for refuelling duration is about 35 days. It can be much longer, e.g., 80 days, but this is when refuelling is coupled with exceptional refurbishment operations.
+Refuelling can be disruptive for the power system, as it implies shutting down firm power for at least 35 consecutive days, and the impact of refuelling should be carefully studied.
+This is possibly the most controversial opinion of this post, but I think that the refuelling window should be modelled as flexible in capacity expansion studies.
+Refuelling outages are scheduled well in advance to match the moment the fuel reaches its target burnup, which is a function of the fuel and core design.
+However, some levers are available to shift the refuelling window. First, the operator can perform stretch, to delay the refuelling by a few weeks. Another option, only available if there are multiple reactors being operated with load-following, is to reduce the average power output of one reactor and shift it to the others. That way, the target burnup of that one reactor is reached later in time - obviously it can't be done for all reactors at the same time.
+The last but most important reason to model refuelling as flexible is that, in general, capacity expansion studies target future years - far enough in the future that there is sufficient time to adjust the refuelling window to an optimal schedule. For the most part, the operator will know years in advance when the high-demand seasons will be, so they will be able to optimize the refuelling schedule so that no refuelling happens at these times. 
+
+For these reasons, I believe that optimizing the refuelling schedule is the best assumption for a general capacity expansion case. Tracking the burnup of fuel in capacity expansion studies is overkill; instead you can safely assume that the operator will have multiple years to adjust and optimize the schedule.
+
+However, this assumption does not hold for contingency analysis. If you need to perform such an analysis, you will likely need multiple runs: first to fix decisions, including refuelling, and then to evaluate the resulting system under contingencies.
+
+For the same reasons as for capacity, applying integrality constraints to unit commitment variables might be necessary depending on the case. In particular, if the size of one reactor is not small relative to the system demand, integer unit commitment will be required.
+Another strong incentive to use integer unit commitment is if you want to model the must-run operation of nuclear (no ramping). In that case, the flexibility added by partially committing reactors can lead to an underestimation of the flexibility requirements of the system.
+Finally, the refuelling operation is disruptive because it is lumpy. Relaxing the integrality constraint can spread it over extended periods, which will underestimate its impact.
+
+As mentioned above, refuelling happens about once every 1.5 years, depending on the core type and its fuel management strategy. If you manage a fleet of reactors with clustered unit commitment, you can express the refuelling count constraint as "the number of refuelling stops is greater than or equal to 2/3 of the number of reactors"[^6].
+
+[^6]: You may also include a less-than-or-equal-to constraint; more detail on this appears in the implementation section.
+
+## Contribution to operating reserve
+
+Nuclear is able to contribute to the operating reserve[^7] of the system. It is even able to contribute to fast operating reserves (FCR, both upward and downward, and aFRR, in European taxonomy). 
+Whether doing so is economic or desirable is another question. Indeed, being able to provide upward operating reserve implies that you're not running the plant at full capacity. There is a major economic incentive to run CAPEX-intensive plants at full capacity at all times - and not make room for reserves.
+
+[^7]: Sources: this [NEA report](https://www.oecd-nea.org/upload/docs/application/pdf/2021-12/technical_and_economic_aspects_of_load_following_with_nuclear_power_plants.pdf) and this [EDF publication](https://www.edf.fr/la-centrale-nucleaire-du-tricastin/les-actualites-de-la-centrale-nucleaire-du-tricastin/la-frequence-electrique-un-equilibre-vital-pour-le-reseau-et-pour-la-centrale-nucleaire-du-tricastin)
+
+
+## Planned and forced outages
+
+On average, stopping for 35 days for refuelling every year and a half implies a 93.6% availability rate. The world average for the actual availability rate of reactors (not just PWRs, though PWRs represent more than 75% of the total capacity) is closer to 80–85%[^8]. 
+
+The world average of unplanned capacity losses has generally been between 3% and 6% per year[^9]. It includes unplanned outages but also unplanned deratings and unplanned extensions of planned outages. Of course, when you zoom to one country, it can get higher. The way to model unplanned capacity losses depends on the modelling goals. There are multiple techniques that can be used, such as derating, explicit outages scenarios, and two-stage stochastic optimization, but there is no silver bullet.
+In addition, it is generally good practice to test the resilience of capacity mixes against contingencies.
+
+Most of the remaining unavailability is planned outages. In particular, it is frequent that operators extend the refuelling shutdown duration to perform other maintenance or refurbishing operations. Some operators proceeded to extend refuelling shutdowns in the immediate post-Fukushima era to reinforce the plant safety. Refurbishments relative to LTO are another type of planned outage, occurring toward the end of the initial lifetime of the plant.
+
+[^8]: See the [IAEA PRIS database](https://pris.iaea.org/pris/worldstatistics/worldtrendinenergyavailabilityfactor.aspx).
+
+[^9]: Also from [PRIS](https://pris.iaea.org/PRIS/WorldStatistics/WorldTrendinUnplannedCapabilityLossFactor.aspx).
+
+
+## Summary
+
+| Feature | Suggested representation for capacity expansion and dispatch |
+|:---|:---|
+| Costs | High CAPEX, small decommissioning costs; fixed O&M and connection costs; variable fuel and waste costs |
+| Capacity | Integer reactor units when unit size is significant relative to the system |
+| Operation | Unit commitment with 20–30% minimum stable output and 2–5%/min ramping |
+| Starts and stops | 12 h for a cold start, 1 h to shut down, and at least 24 h minimum downtime |
+| Refuelling | Flexible outage of about 35 consecutive days every 1.5 years |
+| Reserves | Optional, allow upward and downward fast reserves |
+
+# Example: modelling with Nosy
+
+The code block below illustrates how to build a nuclear fleet with [Nosy](https://github.com/oecd-nea/Nosy.jl), using the assumptions above.
+The cost values are taken from the OECD report [Projected Costs of Generating Electricity 2020](https://www.oecd.org/en/publications/projected-costs-of-generating-electricity-2020_a6002f3b-en.html).
+We assume that some units can undergo LTO; they will be exogenously considered as deployed. The new-build capacity is variable.
+
+The year is modelled as 8,760 hours. The reactor only generates electricity.
+
+```julia
+using Nosy, HiGHS
+using JuMP: @constraint
+
+# Technical parameters
+unit_size = 1650. # MW; EPR net capacity
+min_power = 0.3 # ratio of unit size, minimum stable power
+ramping_rate = 1.2 # equivalent full power ramping per hour (=0.02 * 60)
+startup_duration = 12 # hours
+shutdown_duration = 1 # hours
+min_downtime = 24 # hours, for load-following purposes
+refuelling_duration = 35 * 24 # hours
+
+# Assume there are already existing units, on which LTO will be performed
+units_lto = 3 # number of units that will undergo LTO
+capacity_lto = units_lto * unit_size
+
+# French EPR case from the OECD report, generated using tables 3.4a and 3.13a:
+# 2018 USD, 7% discount rate
+newbuild_investment_cost = 353_759 # USD/MW/year; includes long lead time
+lto_investment_cost = 61_429 # USD/MW/year, for older reactors
+connection_cost = 0.05 * newbuild_investment_cost # USD/MW/year
+fom_cost = 106_185.96 # USD/MW/year; O&M treated as fixed
+fuel_cost = 7.00 # USD/MWh
+waste_cost = 2.33 # USD/MWh
+decom_cost = 372.30 # USD/MW/year
+
+# Nosy simulation core and energy carrier
+sim = Sim(Model(HiGHS.Optimizer))
+carrier = EnergyCarrier("electricity", sim)
+
+# Model archetype for the reactor fleet
+# The archetype is a "dispatchable source";
+# this means that it outputs a flow associated with a different variable at each hour
+m = DispatchableSource(carrier) 
+
+# vector of behaviors that will refine how the component operates
+vb = []
+
+# Capacity expansion
+push!(vb, VariableCapacity(
+    "output",
+    energy, # "energy" is a modifier function, targeting energy flows 
+    lb=units_lto*unit_size, # lower bound for capacity
+    unitsize=unit_size,
+    integer=true,
+))
+
+# Clustered unit commitment
+# Notice the 2 downtimes: first for load following, second for refuelling
+push!(vb, UnitCommitment(
+    "output",
+    min_power, # minimum stable power
+    downtime=[min_downtime, refuelling_duration],
+    startup=startup_duration, 
+    shutdown=shutdown_duration, 
+    integer=true,
+))
+
+# A ramping rate over 1 is non-binding for dispatch
+# However it has an impact on operating reserve capabilities
+# We only model upward ramping, downward would be the same with :down
+push!(vb, Ramping("output", :up, ramping_rate)) 
+
+# 15 min operating reserve
+# We only model upward reserve, downward would be the same with :down
+push!(vb, Nosy.ReserveUp("afrr", "output", :up, 0.25, modifier=energy))
+
+# LTO part of the investment cost
+push!(vb, ConstantCost(:lto, lto_investment_cost * capacity_lto))
+
+# Investment cost for new build part of the investment cost, only applied to new build
+push!(vb, FixedCost(:investment, "output", energy, newbuild_investment_cost, 
+    threshold=capacity_lto
+))
+
+# Decommissioning and connection costs are also only applied to new build
+push!(vb, FixedCost(:decommissioning, "output", energy, decom_cost, 
+    threshold=capacity_lto
+)) 
+push!(vb, FixedCost(:connection, "output", energy, connection_cost, 
+    threshold=capacity_lto
+))
+
+# Fixed costs applied to all the fleet
+push!(vb, FixedCost(:fom, "output", energy, fom_cost))
+
+# Variable costs; fuel, waste management. O&M is considered as purely fixed.
+push!(vb, VariableCost(:fuel, "output", energy, fuel_cost))
+push!(vb, VariableCost(:waste, "output", energy, waste_cost))
+
+# Building the component
+c = Component("PWR fleet", m, vb) # generation of the component
+
+# Adding the refuelling constraints now the component exists
+# We count the number of shutdowns relative to fuel reloading
+# Next line is brittle, but kept simple to illustrate the method
+sum_reload = sum(c.behaviors[2].shutdownselector[2]) 
+# 2/3 of units refuelled each year
+@constraint(model(sim), 3 * sum_reload >= 2 * nbunits(c)) 
+# cut to eliminate excessive refuelling
+@constraint(model(sim), 3 * sum_reload <= 2 * nbunits(c) + 2) 
+```
+
+We obtain the component "PWR fleet", based on a dispatchable source and refined by 11 behaviours. It is supported by 70,084 variables (including 35,041 integer variables), 122,645 algebraic constraints, 70,084 bounds, and 35,041 integrality conditions, which is quite heavy for one component.
+Simplification is not the purpose of the present post, but the easiest simplifications include:
+
+* relaxing the integrality constraint on capacity while retaining integer unit commitment, as benchmarking shows that this generally reduces computation time;
+* using unit commitment masks; see [my post on that topic](../uc_masks/);
+* removing reserves unless they are required and used.
