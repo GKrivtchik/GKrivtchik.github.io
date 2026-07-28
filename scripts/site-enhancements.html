@@ -1,5 +1,37 @@
 <script>
 (function () {
+  // Quarto always renders listing category filters in the page margin. When a
+  // page provides a blog-categories target, move the generated controls there
+  // so the filters remain next to the listing they control.
+  function moveListingCategories() {
+    const target = document.getElementById("blog-categories");
+    const sidebar = document.getElementById("quarto-margin-sidebar");
+    const categories = sidebar
+      ? sidebar.querySelector(".quarto-listing-category")
+      : null;
+
+    if (!target || !sidebar || !categories) {
+      return;
+    }
+
+    const sourceTitle = sidebar.querySelector(
+      ".quarto-listing-category-title"
+    );
+    const title = document.createElement("h3");
+    title.id = "blog-category-filter-title";
+    title.className = "quarto-listing-category-title";
+    title.textContent = sourceTitle ? sourceTitle.textContent : "Categories";
+    categories.setAttribute("aria-labelledby", title.id);
+
+    target.append(title, categories);
+    if (sourceTitle) {
+      sourceTitle.remove();
+    }
+    if (!sidebar.children.length) {
+      sidebar.remove();
+    }
+  }
+
   // Quarto renders post title categories as static chips; upgrade them into
   // links that open the blog listing with the matching category filter active.
   function blogIndexUrl(category) {
@@ -35,5 +67,7 @@
       link.setAttribute("aria-label", "View posts tagged " + category);
       categoryEl.replaceWith(link);
     });
+
+  moveListingCategories();
 })();
 </script>

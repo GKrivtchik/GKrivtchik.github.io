@@ -43,7 +43,7 @@ format:
     anchor-sections: true
     smooth-scroll: true
     include-in-header: scripts/favicon-links.html
-    include-after-body: scripts/post-category-links.html
+    include-after-body: scripts/site-enhancements.html
 
 execute:
   freeze: auto

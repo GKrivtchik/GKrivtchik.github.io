@@ -1,6 +1,7 @@
 ---
 title: "Guillaume Krivtchik"
 listing:
+  id: blog-listing
   contents: posts/*/index.qmd
   sort: "date desc"
   type: default
@@ -8,28 +9,35 @@ listing:
   categories: true
   feed: false
 page-layout: article
-title-block-style: none
+title-block-style: plain
 ---
 
 ::: {.home-intro}
-# Guillaume Krivtchik
+I build and use modelling and optimisation tools for energy systems. I also write about technical questions that arise from this work.
 
-I build modelling and optimization tools for energy systems.
+I have worked on modelling low-carbon energy systems since 2011. I currently work on energy systems modelling at the OECD Nuclear Energy Agency. Previously, I worked as an energy systems modelling engineer at Terra Praxis and as a research engineer at CEA, where I focused on modelling nuclear fuel cycle scenarios and industrial decarbonisation.
 
-I currently work on energy systems modelling at the OECD Nuclear Energy Agency.
+## Open-source projects
 
-Before that: energy systems modelling at Terra Praxis; nuclear fuel cycle scenarios modelling at CEA.
+### Energy systems optimisation
 
-## Projects
+- [Nosy.jl](https://github.com/oecd-nea/Nosy.jl): composable, component-based energy system modelling and optimisation toolkit. Maturity: used in production, including at the OECD Nuclear Energy Agency.
+- [EnergyPathway.jl](https://github.com/GKrivtchik/EnergyPathway.jl): capacity expansion pathway layer built on top of Nosy.jl. Maturity: prototype.
 
-- [Nosy.jl](https://github.com/oecd-nea/Nosy.jl): composable, component-based energy system modelling and optimization toolkit
-- [EnergyPathway.jl](https://github.com/GKrivtchik/EnergyPathway.jl): capacity expansion pathway layer built on top of Nosy.jl
-- [NuclearFuelScenario.jl](https://github.com/GKrivtchik/NuclearFuelScenario.jl): small and fast nuclear fuel model for supply chain analysis
+### Nuclear fuel modelling
+
+- [NuclearFuelScenario.jl](https://github.com/GKrivtchik/NuclearFuelScenario.jl): small and fast nuclear fuel model for supply chain analysis. Maturity: experimental, but already used for analysis.
 
 ## Contact
 
-Questions, corrections, or opportunities: [guillaume@gkrivtchik.com](mailto:guillaume@gkrivtchik.com)
+Questions, corrections or opportunities: [guillaume@gkrivtchik.com](mailto:guillaume@gkrivtchik.com)
 
 :::
 
 ## Blog
+
+::: {#blog-categories}
+:::
+
+::: {#blog-listing}
+:::
