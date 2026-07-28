@@ -47,3 +47,6 @@ format:
 
 execute:
   freeze: auto
+
+filters:
+  - scripts/article-jsonld.lua

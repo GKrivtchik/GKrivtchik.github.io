@@ -2,6 +2,7 @@
 title: "Multiple time meshes for MILP energy systems modelling"
 description: "Further reducing the computational burden in energy systems modelling using multiple time meshes"
 date: 2026-06-19
+date-modified: 2026-06-29
 categories: [energy systems, MILP, optimization]
 ---
 

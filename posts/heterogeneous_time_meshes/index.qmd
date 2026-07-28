@@ -2,6 +2,7 @@
 title: "Heterogeneous time meshes for MILP energy systems modelling"
 description: "Reducing the computational burden in energy systems modelling using heterogeneous time meshes"
 date: 2026-06-14
+date-modified: 2026-06-29
 categories: [energy systems, MILP, optimization]
 ---
 
